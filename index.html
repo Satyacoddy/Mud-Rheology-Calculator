@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mud Rheology Calculator</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#06b6d4;--muted:#94a3b8;--glass:rgba(255,255,255,0.04)}
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;margin:0;background:linear-gradient(180deg,#071025 0%, #08122a 60%);color:#e6eef6;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .app{width:100%;max-width:980px;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);border-radius:12px;padding:20px;box-shadow:0 10px 30px rgba(2,6,23,0.7)}
+    h1{margin:0 0 8px;font-size:20px}
+    p.lead{margin:0 0 18px;color:var(--muted);font-size:13px}
+    .grid{display:grid;grid-template-columns:1fr 420px;gap:16px}
+    .card{background:var(--card);padding:14px;border-radius:10px;border:1px solid rgba(255,255,255,0.03)}
+    label{display:block;font-size:13px;margin-bottom:6px;color:var(--muted)}
+    .row{display:flex;gap:8px;margin-bottom:10px}
+    input[type="number"], input[type="text"]{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:var(--glass);color:inherit}
+    .small{width:90px}
+    .btn{background:var(--accent);color:#022;padding:8px 12px;border-radius:8px;border:none;cursor:pointer;font-weight:600}
+    .muted{color:var(--muted);font-size:13px}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{padding:6px 8px;text-align:left;border-bottom:1px dashed rgba(255,255,255,0.03);font-size:13px}
+    .output{font-weight:700;color:#fff}
+    .footnote{font-size:12px;color:var(--muted);margin-top:8px}
+    canvas{width:100%;height:200px;background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent);border-radius:6px}
+    .actions{display:flex;gap:8px;margin-top:10px}
+    @media(max-width:920px){.grid{grid-template-columns:1fr;}.small{width:72px}}
+  </style>
+</head>
+<body>
+  <div class="app" role="main">
+    <h1>Mud Rheology Calculator</h1>
+    <p class="lead">Use standard viscometer dial readings (600 & 300 rpm method) or full multi-speed readings to compute PV, YP, apparent viscosity, and fit a Power-law (Ostwald) model. Default conversion factors assume a Fann viscometer (stressFactor = 1.5, rateFactor = 1.703). You can change them if your instrument differs.</p>
+
+    <div class="grid">
+      <div class="card">
+        <h3 style="margin-top:0">Inputs</h3>
+
+        <div class="row">
+          <div style="flex:1">
+            <label>600 rpm dial reading</label>
+            <input id="r600" type="number" step="any" value="102">
+          </div>
+          <div style="flex:1">
+            <label>300 rpm dial reading</label>
+            <input id="r300" type="number" step="any" value="84">
+          </div>
+        </div>
+
+        <details style="margin-bottom:8px">
+          <summary style="cursor:pointer;color:var(--muted)">Optional: enter full multi-speed dial readings</summary>
+          <div style="margin-top:8px">
+            <label class="muted">Enter dial readings (leave blank to ignore)</label>
+            <div class="row">
+              <input id="r200" type="number" placeholder="200 rpm" step="any">
+              <input id="r100" type="number" placeholder="100 rpm" step="any">
+            </div>
+            <div class="row">
+              <input id="r6" type="number" placeholder="6 rpm" step="any">
+              <input id="r3" type="number" placeholder="3 rpm" step="any">
+            </div>
+          </div>
+        </details>
+
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+          <div style="flex:1">
+            <label>10s gel (lb/100 ft²)</label>
+            <input id="g10" type="number" step="any" placeholder="e.g. 4">
+          </div>
+          <div style="flex:1">
+            <label>10min gel (lb/100 ft²)</label>
+            <input id="g10m" type="number" step="any" placeholder="e.g. 8">
+          </div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid rgba(255,255,255,0.03);margin:12px 0">
+        <h4 style="margin:6px 0">Instrument conversion factors</h4>
+        <div class="row" style="align-items:center">
+          <div style="flex:1">
+            <label>Shear stress factor (τ = factor × dial)</label>
+            <input id="stressFactor" type="number" step="any" value="1.5">
+          </div>
+          <div style="flex:1">
+            <label>Shear rate factor (γ̇ = rpm × factor)</label>
+            <input id="rateFactor" type="number" step="any" value="1.703">
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn" onclick="compute()">Calculate</button>
+          <button class="btn" style="background:#94a3b8;color:#022" onclick="resetDefaults()">Reset values</button>
+          <button class="btn" style="background:#0ea5a4;color:#022" onclick="downloadHTML()">Download HTML</button>
+        </div>
+
+        <p class="footnote">Notes: PV = 600−300 (cP). YP = 300−PV (lb/100 ft²). Apparent viscosity (AV) = 600/2. Power-law fit requires at least two valid multi-speed readings (non-empty).</p>
+      </div>
+
+      <div>
+        <div class="card">
+          <h3 style="margin-top:0">Results</h3>
+          <table>
+            <tbody>
+              <tr><th>Apparent viscosity (AV)</th><td id="av" class="output">—</td></tr>
+              <tr><th>Plastic viscosity (PV)</th><td id="pv" class="output">—</td></tr>
+              <tr><th>Yield point (YP)</th><td id="yp" class="output">—</td></tr>
+              <tr><th>10s / 10min gel</th><td id="gels" class="output">—</td></tr>
+            </tbody>
+          </table>
+
+          <div style="margin-top:10px">
+            <h4 style="margin:6px 0">Power-law (Ostwald) fit</h4>
+            <div class="muted">K (consistency) and n (flow behavior index) are calculated using available multi-speed data and the selected conversion factors.</div>
+            <table>
+              <tbody>
+                <tr><th>n (flow index)</th><td id="n_val" class="output">—</td></tr>
+                <tr><th>K (consistency, in same units as stress)</th><td id="k_val" class="output">—</td></tr>
+                <tr><th>Fit R²</th><td id="r2" class="output">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="margin-top:12px">
+            <h4 style="margin:6px 0">Shear stress table</h4>
+            <div id="tableContainer" style="max-height:170px;overflow:auto"></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h4 style="margin:6px 0">Plot (shear rate vs shear stress)</h4>
+          <canvas id="plotCanvas"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <p class="footnote">Tip: If you only have 600 and 300 rpm, the basic API/Bingham calculations are enough for most drilling-mud quick decisions. Use full-speed regressions for more accurate non-Newtonian characterization.</p>
+  </div>
+
+<script>
+function resetDefaults(){
+  document.getElementById('r600').value = 102;
+  document.getElementById('r300').value = 84;
+  document.getElementById('r200').value = '';
+  document.getElementById('r100').value = '';
+  document.getElementById('r6').value = '';
+  document.getElementById('r3').value = '';
+  document.getElementById('g10').value = '';
+  document.getElementById('g10m').value = '';
+  document.getElementById('stressFactor').value = 1.5;
+  document.getElementById('rateFactor').value = 1.703;
+  compute();
+}
+
+function compute(){
+  const r600 = parseFloat(document.getElementById('r600').value) || 0;
+  const r300 = parseFloat(document.getElementById('r300').value) || 0;
+  const r200 = parseFloat(document.getElementById('r200').value);
+  const r100 = parseFloat(document.getElementById('r100').value);
+  const r6 = parseFloat(document.getElementById('r6').value);
+  const r3 = parseFloat(document.getElementById('r3').value);
+  const g10 = document.getElementById('g10').value;
+  const g10m = document.getElementById('g10m').value;
+  const stressFactor = parseFloat(document.getElementById('stressFactor').value) || 1.5;
+  const rateFactor = parseFloat(document.getElementById('rateFactor').value) || 1.703;
+
+  // API/Bingham quick calcs
+  const av = (r600/2).toFixed(2);
+  const pv = (r600 - r300).toFixed(2);
+  const yp = (r300 - (r600 - r300)).toFixed(2); // 300 - PV
+
+  document.getElementById('av').textContent = av + ' cP (apparent)';
+  document.getElementById('pv').textContent = pv + ' cP (plastic)';
+  document.getElementById('yp').textContent = yp + ' lb/100 ft² (yield point)';
+  document.getElementById('gels').textContent = ((g10===''? '—': g10) + ' / ' + (g10m===''? '—' : g10m));
+
+  // Prepare multi-speed data if present
+  const speeds = [600,300,200,100,6,3];
+  const readings = [r600,r300,r200,r100,r6,r3];
+  const points = [];
+  const tableRows = [];
+
+  for(let i=0;i<speeds.length;i++){
+    const d = readings[i];
+    if(typeof d === 'number' && !isNaN(d)){
+      const tau = d * stressFactor; // shear stress
+      const gamma = speeds[i] * rateFactor; // shear rate
+      points.push({rpm:speeds[i],dial:d,tau:tau,gamma:gamma});
+      tableRows.push(`<tr><td>${speeds[i]} rpm</td><td>${d}</td><td>${tau.toFixed(3)}</td><td>${gamma.toFixed(3)}</td></tr>`);
+    }
+  }
+
+  const tableHTML = `<table style="width:100%"><thead><tr><th>Speed</th><th>Dial</th><th>Shear stress (τ)</th><th>Shear rate (γ̇)</th></tr></thead><tbody>${tableRows.join('')}</tbody></table>`;
+  document.getElementById('tableContainer').innerHTML = points.length? tableHTML : '<div class="muted">No multi-speed readings provided.</div>';
+
+  // Power-law fit (log-log): tau = K * (gamma)^n  => ln(tau)=ln(K) + n ln(gamma)
+  if(points.length >= 2){
+    // use only positive shear stresses
+    const xs = [], ys = [];
+    for(const p of points){ if(p.tau>0 && p.gamma>0){ xs.push(Math.log(p.gamma)); ys.push(Math.log(p.tau)); } }
+    if(xs.length>=2){
+      const n = xs.length;
+      const xbar = xs.reduce((a,b)=>a+b,0)/n;
+      const ybar = ys.reduce((a,b)=>a+b,0)/n;
+      let num=0, den=0, ssTot=0, ssRes=0;
+      for(let i=0;i<n;i++){
+        num += (xs[i]-xbar)*(ys[i]-ybar);
+        den += (xs[i]-xbar)*(xs[i]-xbar);
+      }
+      const slope = num/den; // n
+      const intercept = ybar - slope*xbar; // ln(K)
+      const K = Math.exp(intercept);
+
+      // R^2
+      const yPred = xs.map(x=> intercept + slope*x);
+      const yMean = ybar;
+      for(let i=0;i<n;i++){
+        ssTot += (ys[i]-yMean)*(ys[i]-yMean);
+        ssRes += (ys[i]-yPred[i])*(ys[i]-yPred[i]);
+      }
+      const r2 = 1 - ssRes/ssTot;
+
+      document.getElementById('n_val').textContent = slope.toFixed(4);
+      document.getElementById('k_val').textContent = K.toFixed(4);
+      document.getElementById('r2').textContent = (isFinite(r2)? r2.toFixed(4): '—');
+
+      drawPlot(points, slope, K, rateFactor);
+    } else {
+      document.getElementById('n_val').textContent = '—';
+      document.getElementById('k_val').textContent = '—';
+      document.getElementById('r2').textContent = '—';
+      clearPlot();
+    }
+  } else {
+    document.getElementById('n_val').textContent = '—';
+    document.getElementById('k_val').textContent = '—';
+    document.getElementById('r2').textContent = '—';
+    clearPlot();
+  }
+}
+
+function clearPlot(){
+  const c = document.getElementById('plotCanvas');
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+}
+
+function drawPlot(points, slope, K, rateFactor){
+  const c = document.getElementById('plotCanvas');
+  // ensure correct pixel size
+  c.width = c.clientWidth * devicePixelRatio;
+  c.height = c.clientHeight * devicePixelRatio;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+
+  // transform to log-log plot canvas
+  const padding = 40 * devicePixelRatio;
+  const w = c.width - padding*1.5;
+  const h = c.height - padding*1.2;
+
+  // x: gamma (shear rate), y: tau
+  const xs = points.map(p=>p.gamma);
+  const ys = points.map(p=>p.tau);
+  const minX = Math.min(...xs); const maxX = Math.max(...xs);
+  const minY = Math.min(...ys); const maxY = Math.max(...ys);
+  const log = v => Math.log(v);
+  const lminX = log(minX); const lmaxX = log(maxX);
+  const lminY = log(minY); const lmaxY = log(maxY);
+
+  function sx(x){ return padding + ((log(x)-lminX)/(lmaxX-lminX))*w; }
+  function sy(y){ return c.height - padding - ((log(y)-lminY)/(lmaxY-lminY))*h; }
+
+  // axes
+  ctx.strokeStyle = 'rgba(255,255,255,0.09)'; ctx.lineWidth = 1*devicePixelRatio;
+  ctx.beginPath(); ctx.moveTo(padding, padding/2); ctx.lineTo(padding, c.height-padding/2); ctx.lineTo(c.width-padding/2, c.height-padding/2); ctx.stroke();
+
+  // points
+  ctx.fillStyle = '#06b6d4';
+  for(const p of points){ ctx.beginPath(); ctx.arc(sx(p.gamma), sy(p.tau), 4*devicePixelRatio, 0, Math.PI*2); ctx.fill(); }
+
+  // fitted line: ln(tau)=ln(K)+n ln(gamma)
+  // draw from minX to maxX
+  ctx.strokeStyle = 'rgba(99,102,241,0.9)'; ctx.lineWidth = 2*devicePixelRatio;
+  ctx.beginPath();
+  const x0 = minX; const x1 = maxX;
+  const y0 = K * Math.pow(x0, slope);
+  const y1 = K * Math.pow(x1, slope);
+  ctx.moveTo(sx(x0), sy(y0)); ctx.lineTo(sx(x1), sy(y1)); ctx.stroke();
+
+  // labels
+  ctx.fillStyle = '#cbd5e1'; ctx.font = `${12*devicePixelRatio}px sans-serif`;
+  ctx.fillText('Shear rate (γ̇)', c.width/2 - 20*devicePixelRatio, c.height - 6*devicePixelRatio);
+  ctx.save(); ctx.translate(8*devicePixelRatio, c.height/2 + 20*devicePixelRatio); ctx.rotate(-Math.PI/2); ctx.fillText('Shear stress (τ)', 0, 0); ctx.restore();
+}
+
+// create downloadable HTML of this page
+function downloadHTML(){
+  const html = `<!doctype html>\n${document.documentElement.outerHTML}`;
+  const blob = new Blob([html], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='mud-rheology-calculator.html'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+
+// run initial compute
+compute();
+</script>
+</body>
+</html>
